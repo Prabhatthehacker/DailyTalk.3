@@ -38,7 +38,7 @@ export function parseUploadResponse(text: string): string {
 }
 
 export function safeUploadName(name: string): string {
-  const clean = name.replace(/[^\w.\-]+/g, '_').slice(-80);
+  const clean = name.replace(/[^\w.-]+/g, '_').slice(-80);
   return /\.[A-Za-z0-9]{2,5}$/.test(clean) ? clean : `${clean || 'file'}.bin`;
 }
 
@@ -54,7 +54,7 @@ export function uploadMedia(file: File, onProgress: (fraction: number) => void):
         resolve(parseUploadResponse(xhr.responseText));
       } catch (e) { reject(e); }
     };
-    xhr.onerror = () => reject(new UploadError('Upload failed. The file host could not be reached, or it blocked this website. Check your connection; if it keeps failing see the README section "If photo and video uploads fail".'));
+    xhr.onerror = () => reject(new UploadError('Upload failed. The file host could not be reached, or it blocked this website. Check your connection; if it keeps failing see the README section "If...');
     xhr.ontimeout = () => reject(new UploadError('The upload took too long. Try a smaller file or a faster connection.'));
     const form = new FormData();
     form.append('reqtype', 'fileupload');
