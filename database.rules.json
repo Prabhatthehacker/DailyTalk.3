@@ -189,7 +189,7 @@
           ".validate": "newData.isNumber() && newData.val() > now + 82800000 && newData.val() <= now + 90000000"
         },
         "viewers": {
-          ".validate": ,
+          ".validate": "newData.val() === true"
           "$v": {
             ".validate": "newData.val() === true"
           }
