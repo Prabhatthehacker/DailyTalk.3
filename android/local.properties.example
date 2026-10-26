@@ -1,0 +1,12 @@
+# Copy to local.properties (git-ignored). Values come from Firebase Console > Project settings > Your apps > Android.
+FIREBASE_API_KEY=your-android-api-key
+FIREBASE_APP_ID=1:000000000000:android:xxxxxxxxxxxx
+FIREBASE_PROJECT_ID=your-project-id
+FIREBASE_DATABASE_URL=https://your-project-default-rtdb.asia-southeast1.firebasedatabase.app
+GIPHY_API_KEY=
+TURN_URL=
+TURN_USERNAME=
+TURN_CREDENTIAL=
+# Optional: only if you deploy the upload proxy (worker/). Default is catbox.moe directly.
+UPLOAD_URL=
+MAX_UPLOAD_MB=200

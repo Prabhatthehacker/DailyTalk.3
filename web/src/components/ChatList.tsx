@@ -1,0 +1,72 @@
+import { useMemo, useState } from 'react';
+import { NavLink, useNavigate } from 'react-router-dom';
+import { useStore } from '../store';
+import { conversationTitle, formatTime } from '../lib/labels';
+import type { Conversation } from '../lib/types';
+import { Avatar, Logo } from './Logo';
+import { ChatMenu, usePopover, type ChatAction } from './ChatMenu';
+
+export function Sidebar({ tab, onAction, onAddChat, onAddGroup, onSettings, onLogout }: {
+  tab: 'chats' | 'status'; onAction: (a: ChatAction, c: Conversation) => void;
+  onAddChat: () => void; onAddGroup: () => void; onSettings: () => void; onLogout: () => void;
+}) {
+  const { user, profile, conversations, contacts, profiles } = useStore();
+  const [q, setQ] = useState(''); const nav = useNavigate(); const add = usePopover();
+  const me = user!.uid;
+  const rows = useMemo(() => conversations
+    .map((c) => ({ c, title: conversationTitle(c, me, contacts, profiles) }))
+    .filter((r) => r.title.toLowerCase().includes(q.trim().toLowerCase())), [conversations, contacts, profiles, q, me]);
+
+  return (
+    <aside className="sidebar">
+      <header className="side-head">
+        <div className="brand"><Logo size={32} /><strong>Daily Talk</strong></div>
+        <button className="me-chip" onClick={onSettings} aria-label="Settings"><Avatar name={profile?.displayName ?? '?'} size={30} /><span>{profile?.displayName}</span></button>
+        <button className="btn outline small logout-btn" onClick={onLogout}>Log out</button>
+      </header>
+      <div className="tabs-row">
+        <nav className="tabs" aria-label="Sections">
+          <NavLink to="/chats" className={tab === 'chats' ? 'tab on' : 'tab'}>Chats</NavLink>
+          <NavLink to="/status" className={tab === 'status' ? 'tab on' : 'tab'}>Status</NavLink>
+        </nav>
+        <div className="menu-wrap" ref={add.ref}>
+          <button className="btn primary small" aria-haspopup="menu" aria-expanded={add.open} onClick={() => add.setOpen(!add.open)}>+ Add</button>
+          {add.open && (
+            <div className="menu" role="menu">
+              <button role="menuitem" onClick={() => { add.setOpen(false); onAddChat(); }}>Add a chat</button>
+              <button role="menuitem" onClick={() => { add.setOpen(false); onAddGroup(); }}>Add a group</button>
+            </div>
+          )}
+        </div>
+      </div>
+      {tab === 'chats' && (
+        <>
+          <input className="search" type="search" placeholder="Search chats" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search chats" />
+          <ul className="chat-list">
+            {rows.map(({ c, title }) => {
+              const unread = c.unread[me] ?? 0;
+              return (
+                <li key={c.id}>
+                  <button className="chat-row" onClick={() => nav(`/chats/${c.id}`)}>
+                    <Avatar name={title} group={c.type === 'group'} />
+                    <span className="chat-main">
+                      <span className="chat-top"><strong>{title}</strong><time>{formatTime(c.updatedAt)}</time></span>
+                      <span className="chat-bottom">
+                        <span className="preview">{c.lastMessage ? `${c.lastMessage.senderId === me ? 'You: ' : ''}${c.lastMessage.text}` : 'No messages yet'}</span>
+                        {unread > 0 && <span className="badge" aria-label={`${unread} unread`}>{unread > 99 ? '99+' : unread}</span>}
+                      </span>
+                    </span>
+                  </button>
+                  <ChatMenu conv={c} onAction={onAction} />
+                </li>
+              );
+            })}
+            {!rows.length && (
+              <li className="empty-list">{q ? 'No chats match your search.' : 'No chats yet. Use Add to start one with a phone number.'}</li>
+            )}
+          </ul>
+        </>
+      )}
+    </aside>
+  );
+}
