@@ -139,7 +139,7 @@ fun ChatScreen(vm: AppViewModel, cid: String, onBack: () -> Unit, onAction: (Cha
     noticeFor?.let { pending ->
         AlertDialog(
             onDismissRequest = { noticeFor = null }, title = { Text("Photos and videos are public links") },
-            text = { Text("Photos and videos are uploaded to a free public file host (catbox.moe), not to Daily Talk. Anyone who gets the link can open the file, and it cannot be deleted from here. Files up to ${Media.maxBytes / 1_000_000} MB are allowed. Only send media you are happy to have on a public site.") },
+            text = { Text("Photos and videos are uploaded to a free public file host (catbox.moe), not to Daily Talk. Anyone who gets the link can open the file, and it cannot be deleted from the upload host. By continuing, you confirm you are okay sharing the media publicly.") },
             confirmButton = { TextButton({ prefs.edit().putBoolean("mediaNoticeAccepted", true).apply(); noticeFor = null; sendUris(pending) }) { Text("Upload anyway") } },
             dismissButton = { TextButton({ noticeFor = null }) { Text("Cancel") } },
         )
@@ -179,8 +179,8 @@ fun ChatScreen(vm: AppViewModel, cid: String, onBack: () -> Unit, onAction: (Cha
 
         Row(Modifier.fillMaxWidth().background(Palette.Ivory).padding(horizontal = 6.dp, vertical = 6.dp), verticalAlignment = Alignment.Bottom) {
             TextButton({ panel = if (panel == "emoji") null else "emoji" }, contentPadding = androidx.compose.foundation.layout.PaddingValues(6.dp), modifier = Modifier.width(48.dp)) { Text("😊") }
-            TextButton({ panel = if (panel == "gif") null else "gif" }, contentPadding = androidx.compose.foundation.layout.PaddingValues(6.dp), modifier = Modifier.width(48.dp)) { Text("GIF", fontWeight = FontWeight.Bold) }
-            TextButton({ picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)) }, contentPadding = androidx.compose.foundation.layout.PaddingValues(6.dp), modifier = Modifier.width(56.dp)) { Text("Media") }
+            TextButton({ panel = if (panel == "gif") null else "gif" }, contentPadding = androidx.compose.foundation.layout.PaddingValues(6.dp), modifier = Modifier.width(48.dp)) { Text("GIF", fontWeight = FontWeight.SemiBold) }
+            TextButton({ picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)) }, contentPadding = androidx.compose.foundation.layout.PaddingValues(6.dp), modifier = Modifier.width(48.dp)) { Text("📎") }
             OutlinedTextField(text, { text = it.take(4000) }, Modifier.weight(1f), placeholder = { Text("Type a message") }, maxLines = 5, shape = RoundedCornerShape(24.dp))
             IconButton({ if (text.isNotBlank()) { enqueue(Repo.Outgoing(newId(), "text", text = text)); text = "" } }, enabled = text.isNotBlank()) {
                 Icon(Icons.Default.Send, contentDescription = "Send", tint = if (text.isNotBlank()) Palette.Brown else Palette.Muted)
@@ -225,15 +225,20 @@ private fun MessageBody(m: Message) {
     val ctx = LocalContext.current; val loader = gifLoader()
     when {
         (m.kind == "gif" || m.kind == "image") && m.url != null ->
-            AsyncImage(ImageRequest.Builder(ctx).data(m.url).crossfade(true).build(), if (m.kind == "gif") "GIF" else "Photo",
-                Modifier.heightIn(max = 260.dp).clip(RoundedCornerShape(12.dp)).clickable(enabled = m.kind == "image" && m.state == SendState.SENT) {
+            AsyncImage(
+                model = ImageRequest.Builder(ctx).data(m.url).crossfade(true).build(),
+                contentDescription = if (m.kind == "gif") "GIF" else "Photo",
+                modifier = Modifier.heightIn(max = 260.dp).clip(RoundedCornerShape(12.dp)).clickable(enabled = m.kind == "image" && m.state == SendState.SENT) {
                     ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(m.url)))
-                }, imageLoader = loader, contentScale = ContentScale.Fit)
+                },
+                imageLoader = loader,
+                contentScale = ContentScale.Fit,
+            )
         m.kind == "video" && m.url != null ->
             Row(Modifier.clickable(enabled = m.state == SendState.SENT) {
                 ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(m.url)))
             }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("\uD83C\uDFAC"); Column { Text("Video", fontWeight = FontWeight.SemiBold); Text("Tap to play", color = Palette.Muted, style = MaterialTheme.typography.bodySmall) }
+                Text("🎬"); Column { Text("Video", fontWeight = FontWeight.SemiBold); Text("Tap to play", color = Palette.Muted, style = MaterialTheme.typography.bodySmall) }
             }
         else -> Text(m.text.orEmpty())
     }
@@ -253,7 +258,15 @@ private fun GifPanel(onPick: (Gif) -> Unit) {
         OutlinedTextField(q, { q = it }, Modifier.fillMaxWidth(), placeholder = { Text("Search GIFs") }, singleLine = true)
         if (error) Text("Could not load GIFs.", color = Palette.Danger)
         LazyVerticalGrid(GridCells.Adaptive(96.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            items(gifs, key = { it.id }) { g -> AsyncImage(g.preview, null, Modifier.size(96.dp).clip(RoundedCornerShape(8.dp)).clickable { onPick(g) }, imageLoader = loader, contentScale = ContentScale.Crop) }
+            items(gifs, key = { it.id }) { g ->
+                AsyncImage(
+                    model = g.preview,
+                    contentDescription = null,
+                    modifier = Modifier.size(96.dp).clip(RoundedCornerShape(8.dp)).clickable { onPick(g) },
+                    imageLoader = loader,
+                    contentScale = ContentScale.Fit,
+                )
+            }
         }
     }
 }
