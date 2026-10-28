@@ -29,12 +29,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Send
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -106,7 +105,6 @@ fun ChatScreen(vm: AppViewModel, cid: String, onBack: () -> Unit, onAction: (Cha
         scope.launch {
             try {
                 var out = first
-                // Photos/videos go to the file host first; the link is kept so a retry never uploads twice.
                 if (out.uri != null && out.url == null) {
                     val link = withTimeout(20 * 60_000L) { Media.upload(ctx.contentResolver, out.uri!!, out.info!!) { pr -> patch { m -> m.copy(progress = pr) } } }
                     out = out.copy(url = link); outgoing[id] = out
@@ -139,7 +137,7 @@ fun ChatScreen(vm: AppViewModel, cid: String, onBack: () -> Unit, onAction: (Cha
     noticeFor?.let { pending ->
         AlertDialog(
             onDismissRequest = { noticeFor = null }, title = { Text("Photos and videos are public links") },
-            text = { Text("Photos and videos are uploaded to a free public file host (catbox.moe), not to Daily Talk. Anyone who gets the link can open the file, and it cannot be deleted from the upload host. By continuing, you confirm you are okay sharing the media publicly.") },
+            text = { Text("Photos and videos are uploaded to a free public file host (catbox.moe), not to Daily Talk. Anyone who gets the link can open the file, and it cannot be deleted from the public host.") },
             confirmButton = { TextButton({ prefs.edit().putBoolean("mediaNoticeAccepted", true).apply(); noticeFor = null; sendUris(pending) }) { Text("Upload anyway") } },
             dismissButton = { TextButton({ noticeFor = null }) { Text("Cancel") } },
         )
@@ -180,7 +178,7 @@ fun ChatScreen(vm: AppViewModel, cid: String, onBack: () -> Unit, onAction: (Cha
         Row(Modifier.fillMaxWidth().background(Palette.Ivory).padding(horizontal = 6.dp, vertical = 6.dp), verticalAlignment = Alignment.Bottom) {
             TextButton({ panel = if (panel == "emoji") null else "emoji" }, contentPadding = androidx.compose.foundation.layout.PaddingValues(6.dp), modifier = Modifier.width(48.dp)) { Text("😊") }
             TextButton({ panel = if (panel == "gif") null else "gif" }, contentPadding = androidx.compose.foundation.layout.PaddingValues(6.dp), modifier = Modifier.width(48.dp)) { Text("GIF", fontWeight = FontWeight.SemiBold) }
-            TextButton({ picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)) }, contentPadding = androidx.compose.foundation.layout.PaddingValues(6.dp), modifier = Modifier.width(48.dp)) { Text("📎") }
+            TextButton({ picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)) }, contentPadding = androidx.compose.foundation.layout.PaddingValues(6.dp), modifier = Modifier.width(48.dp)) { Text("📷") }
             OutlinedTextField(text, { text = it.take(4000) }, Modifier.weight(1f), placeholder = { Text("Type a message") }, maxLines = 5, shape = RoundedCornerShape(24.dp))
             IconButton({ if (text.isNotBlank()) { enqueue(Repo.Outgoing(newId(), "text", text = text)); text = "" } }, enabled = text.isNotBlank()) {
                 Icon(Icons.Default.Send, contentDescription = "Send", tint = if (text.isNotBlank()) Palette.Brown else Palette.Muted)
@@ -222,7 +220,7 @@ private fun gifLoader(): ImageLoader {
 
 @Composable
 private fun MessageBody(m: Message) {
-    val ctx = LocalContext.current; val loader = gifLoader()
+    val ctx = LocalContext.current
     when {
         (m.kind == "gif" || m.kind == "image") && m.url != null ->
             AsyncImage(
@@ -231,7 +229,6 @@ private fun MessageBody(m: Message) {
                 modifier = Modifier.heightIn(max = 260.dp).clip(RoundedCornerShape(12.dp)).clickable(enabled = m.kind == "image" && m.state == SendState.SENT) {
                     ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(m.url)))
                 },
-                imageLoader = loader,
                 contentScale = ContentScale.Fit,
             )
         m.kind == "video" && m.url != null ->
@@ -246,7 +243,6 @@ private fun MessageBody(m: Message) {
 
 @Composable
 private fun GifPanel(onPick: (Gif) -> Unit) {
-    val loader = gifLoader()
     var q by remember { mutableStateOf("") }; var gifs by remember { mutableStateOf<List<Gif>>(emptyList()) }; var error by remember { mutableStateOf(false) }
     LaunchedEffect(q) {
         if (!Giphy.configured) return@LaunchedEffect
@@ -263,7 +259,6 @@ private fun GifPanel(onPick: (Gif) -> Unit) {
                     model = g.preview,
                     contentDescription = null,
                     modifier = Modifier.size(96.dp).clip(RoundedCornerShape(8.dp)).clickable { onPick(g) },
-                    imageLoader = loader,
                     contentScale = ContentScale.Fit,
                 )
             }
