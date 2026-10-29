@@ -11,7 +11,13 @@ import { Avatar } from './Logo';
 import { ChatMenu, type ChatAction } from './ChatMenu';
 import { Confirm } from './Dialogs';
 
-const EMOJI = '😀 😁 😂 🤣 😊 😍 😘 😎 🤔 😢 😭 😡 👍 👎 👏 🙏 💪 🎉 🔥 ❤️ 💛 🧡 ✨ 🌟 🎂 🍕 ☕ 🌅 📚 💻'.split(' ');
+const EMOJI_GROUPS = [
+  { name: 'Smileys', items: ['😀', '😁', '😂', '🤣', '😅', '😊', '😇', '🙂', '😎', '🤩', '😍', '😘', '😜', '🤔', '😐', '😬', '🙃', '😶', '😮', '😵', '🤯', '😴', '😷', '🤧'] },
+  { name: 'People', items: ['👍', '👎', '👏', '🙏', '💪', '🧠', '🤝', '🎉', '🔥', '❤️', '💛', '💚', '💙', '💜', '🧡', '💖', '✨', '🌟', '🎂', '🍕', '☕', '🌈', '🌞', '📚', '💻'] },
+  { name: 'Animals', items: ['🐶', '🐱', '🦊', '🐼', '🐻', '🐨', '🐯', '🦁', '🐵', '🐸', '🐧', '🦄', '🐔', '🦋', '🐝', '🐞', '🐙', '🐠', '🐬', '🦀', '🐳'] },
+  { name: 'Actions', items: ['⚽', '🏀', '🎯', '🎲', '🎸', '🎻', '🎧', '🎮', '🏆', '🚀', '💡', '📌', '✈️', '🚗', '🚲', '🏠', '🧳', '🎁', '🎊', '🎈'] },
+  { name: 'Objects', items: ['💎', '🧩', '🪄', '🧸', '📱', '⌚', '💼', '🧾', '🗂️', '🧺', '🪴', '🍀', '🌙', '⭐', '☀️', '⏰', '📷', '🎧', '🧵', '🛠️'] },
+];
 const PAGE = 40;
 
 interface Outbox { msg: Message; out: api.OutgoingMessage; file?: File }
@@ -40,7 +46,6 @@ export function ChatView({ conv, onAction }: { conv: Conversation; onAction: (a:
 
   useEffect(() => { if (stick.current) listRef.current?.scrollTo({ top: listRef.current.scrollHeight }); }, [messages.length]);
 
-  // Read receipts + clear unread badge while the conversation is on screen.
   useEffect(() => {
     if (document.visibilityState !== 'visible') return;
     void api.markMessagesRead(conv.id, me, server).catch(() => undefined);
@@ -52,7 +57,6 @@ export function ChatView({ conv, onAction }: { conv: Conversation; onAction: (a:
   const dispatch = useCallback(async (entry: Outbox) => {
     patch(entry.msg.id, { state: 'sending', progress: 0 });
     try {
-      // Photos/videos go to the file host first; the link is kept so a retry never uploads twice.
       if (entry.file && !entry.out.url) entry.out.url = await uploadMedia(entry.file, (p) => patch(entry.msg.id, { progress: p }));
       patch(entry.msg.id, { progress: 1 });
       await api.sendMessage(conv, profile!, entry.out);
@@ -76,6 +80,7 @@ export function ChatView({ conv, onAction }: { conv: Conversation; onAction: (a:
   }, [conv.id, me, profile, dispatch]);
 
   const [noticeFor, setNoticeFor] = useState<FileList | null>(null);
+
   function sendFiles(files: FileList | null) {
     Array.from(files ?? []).forEach((f) => {
       const err = validateMedia(f);
@@ -84,9 +89,9 @@ export function ChatView({ conv, onAction }: { conv: Conversation; onAction: (a:
       enqueue({ kind }, f);
     });
   }
+
   function onPickFiles(files: FileList | null) {
     if (!files?.length) return;
-    // One-time reminder that the file host is public.
     if (localStorage.getItem('mediaNoticeAccepted') === '1') sendFiles(files); else setNoticeFor(files);
   }
 
@@ -134,11 +139,23 @@ export function ChatView({ conv, onAction }: { conv: Conversation; onAction: (a:
       </div>
 
       {noticeFor && (
-        <Confirm title="Photos and videos are public links" action="Upload anyway" danger={false}
-          body={`Photos and videos are uploaded to a free public file host (catbox.moe), not to Daily Talk. Anyone who gets the link can open the file, and it cannot be deleted from here. Files up to ${MAX_UPLOAD_MB} MB are allowed. Only send media you are happy to have on a public site.`}
-          onConfirm={() => { localStorage.setItem('mediaNoticeAccepted', '1'); sendFiles(noticeFor); }} onClose={() => setNoticeFor(null)} />
+        <Confirm
+          title="Photos and videos are public links"
+          action="Upload anyway"
+          danger={false}
+          body={`Photos and videos are uploaded to a free public file host (catbox.moe), not to Daily Talk. Anyone who gets the link can open the file, and it cannot be deleted from here. Files uploaded here are public and visible to anyone who has the link.`}
+          onConfirm={() => { localStorage.setItem('mediaNoticeAccepted', '1'); sendFiles(noticeFor); }}
+          onClose={() => setNoticeFor(null)}
+        />
       )}
-      <Composer text={text} setText={setText} onSubmit={send} onFiles={onPickFiles} onGif={(g) => enqueue({ kind: 'gif', url: g.url })} />
+
+      <Composer
+        text={text}
+        setText={setText}
+        onSubmit={send}
+        onFiles={onPickFiles}
+        onGif={(g) => enqueue({ kind: 'gif', url: g.url })}
+      />
     </section>
   );
 }
@@ -161,41 +178,107 @@ function Composer({ text, setText, onSubmit, onFiles, onGif }: {
   text: string; setText: (t: string) => void; onSubmit: (e: FormEvent) => void; onFiles: (f: FileList | null) => void; onGif: (g: Gif) => void;
 }) {
   const [panel, setPanel] = useState<null | 'emoji' | 'gif'>(null);
+  const [emojiTab, setEmojiTab] = useState(0);
   const fileInput = useRef<HTMLInputElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
+
   return (
     <div className="composer-wrap">
-      {panel === 'emoji' && <div className="panel emoji">{EMOJI.map((e) => <button key={e} type="button" onClick={() => { setText(text + e); taRef.current?.focus(); }}>{e}</button>)}</div>}
-      {panel === 'gif' && <GifPanel onPick={(g) => { onGif(g); setPanel(null); }} />}
+      {panel === 'emoji' && (
+        <div className="panel emoji-panel">
+          <div className="panel-header">
+            <strong>Emoji</strong>
+            <button type="button" className="icon-btn small" aria-label="Close emoji picker" onClick={() => setPanel(null)}>✕</button>
+          </div>
+          <div className="emoji-tabs" role="tablist" aria-label="Emoji categories">
+            {EMOJI_GROUPS.map((group, index) => (
+              <button key={group.name} type="button" className={index === emojiTab ? 'active' : ''} onClick={() => setEmojiTab(index)} role="tab" aria-selected={index === emojiTab} aria-label={group.name}>
+                {group.name}
+              </button>
+            ))}
+          </div>
+          <div className="emoji-grid">
+            {EMOJI_GROUPS[emojiTab].items.map((emoji) => (
+              <button key={emoji} type="button" className="emoji-btn" onClick={() => { setText(text + emoji); taRef.current?.focus(); setPanel(null); }} aria-label={`Insert ${emoji}`}>
+                {emoji}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {panel === 'gif' && (
+        <GifPanel onPick={(g) => { onGif(g); setPanel(null); }} onClose={() => setPanel(null)} />
+      )}
+
       <form className="composer" onSubmit={onSubmit}>
         <button type="button" className="icon-btn" aria-label="Emoji" aria-pressed={panel === 'emoji'} onClick={() => setPanel(panel === 'emoji' ? null : 'emoji')}>😊</button>
         <button type="button" className="icon-btn gif-btn" aria-label="GIF" aria-pressed={panel === 'gif'} onClick={() => setPanel(panel === 'gif' ? null : 'gif')}>GIF</button>
         <button type="button" className="icon-btn" aria-label="Send a photo or video" onClick={() => fileInput.current?.click()}>📎</button>
+
         <input ref={fileInput} type="file" hidden multiple accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime"
           onChange={(e) => { onFiles(e.target.files); e.target.value = ''; }} />
+
         <textarea ref={taRef} rows={1} value={text} maxLength={4000} placeholder="Type a message" aria-label="Message"
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); onSubmit(e); } }} />
+
         <button className="btn primary send" disabled={!text.trim()} aria-label="Send">Send</button>
       </form>
     </div>
   );
 }
 
-function GifPanel({ onPick }: { onPick: (g: Gif) => void }) {
-  const [q, setQ] = useState(''); const [gifs, setGifs] = useState<Gif[]>([]); const [state, setState] = useState<'idle' | 'loading' | 'error'>('idle');
+function GifPanel({ onPick, onClose }: { onPick: (g: Gif) => void; onClose: () => void }) {
+  const [q, setQ] = useState('');
+  const [gifs, setGifs] = useState<Gif[]>([]);
+  const [state, setState] = useState<'idle' | 'loading' | 'error'>('idle');
+
   useEffect(() => {
     if (!giphyConfigured) return;
     setState('loading');
-    const t = setTimeout(() => searchGifs(q).then((g) => { setGifs(g); setState('idle'); }).catch(() => setState('error')), 350);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => {
+      searchGifs(q)
+        .then((items) => { setGifs(items); setState('idle'); })
+        .catch(() => setState('error'));
+    }, 350);
+    return () => clearTimeout(timer);
   }, [q]);
-  if (!giphyConfigured) return <div className="panel"><p className="muted">GIF search needs a Giphy key. Add VITE_GIPHY_API_KEY to the site settings.</p></div>;
+
+  if (!giphyConfigured) {
+    return (
+      <div className="panel gif-panel">
+        <div className="panel-header">
+          <strong>GIFs</strong>
+          <button type="button" className="icon-btn small" aria-label="Close GIF picker" onClick={onClose}>✕</button>
+        </div>
+        <p className="panel-note">Add VITE_GIPHY_API_KEY in your site settings to enable GIF search with Giphy.</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="panel gifs">
-      <input type="search" placeholder="Search GIFs" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search GIFs" />
-      {state === 'error' && <p className="error">Could not load GIFs.</p>}
-      <div className="gif-grid">{gifs.map((g) => <button key={g.id} type="button" onClick={() => onPick(g)}><img src={g.preview} alt="" loading="lazy" /></button>)}</div>
+    <div className="panel gif-panel">
+      <div className="panel-header">
+        <strong>GIFs</strong>
+        <button type="button" className="icon-btn small" aria-label="Close GIF picker" onClick={onClose}>✕</button>
+      </div>
+
+      <div className="gif-search">
+        <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search GIFs" aria-label="Search GIFs" />
+      </div>
+
+      {state === 'error' && <p className="error">Could not load GIFs. Try again.</p>}
+      {state === 'loading' && <p className="muted">Loading GIFs…</p>}
+      {!state && <p className="muted">Trending now</p>}
+
+      <div className="gif-grid">
+        {gifs.map((g) => (
+          <button key={g.id} type="button" className="gif-thumb" onClick={() => onPick(g)} aria-label="Send GIF">
+            <img src={g.preview} alt="GIF preview" loading="lazy" />
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
