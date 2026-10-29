@@ -1,6 +1,7 @@
 name: Android
 
-# Builds the Android app (APK). Run it by hand: Actions tab > Android > Run workflow.
+# Builds the Android app (APK).
+# Run it by hand: Actions tab > Android > Run workflow.
 # When it is green, open the run and download "Dailytalk-debug-apk" under Artifacts.
 on:
   push:
@@ -27,6 +28,7 @@ jobs:
       FIREBASE_APP_ID: ${{ secrets.FIREBASE_APP_ID || vars.FIREBASE_APP_ID }}
       FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID || secrets.FIREBASE_PROJECT_ID }}
       FIREBASE_DATABASE_URL: ${{ vars.FIREBASE_DATABASE_URL || secrets.FIREBASE_DATABASE_URL }}
+
       GIPHY_API_KEY: ${{ secrets.GIPHY_API_KEY || vars.GIPHY_API_KEY }}
       UPLOAD_URL: ${{ vars.UPLOAD_URL || secrets.UPLOAD_URL }}
       MAX_UPLOAD_MB: ${{ vars.MAX_UPLOAD_MB || secrets.MAX_UPLOAD_MB }}
@@ -37,14 +39,17 @@ jobs:
       - name: Check out the code
         uses: actions/checkout@v4
 
-      - name: Check that the required settings exist
+      - name: Check required settings exist
         run: |
           missing=""
           for v in FIREBASE_API_KEY FIREBASE_APP_ID FIREBASE_PROJECT_ID FIREBASE_DATABASE_URL; do
-            if [ -z "${!v}" ]; then missing="$missing $v"; fi
+            if [ -z "${!v}" ]; then
+              missing="$missing $v"
+            fi
           done
+
           if [ -n "$missing" ]; then
-            echo "::error title=Missing GitHub settings::These are empty:$missing . FIREBASE_API_KEY and FIREBASE_APP_ID go in the Secrets tab; FIREBASE_PROJECT_ID and FIREBASE_DATABASE_URL go in the Variables tab (Settings > Secrets and variables > Actions)."
+            echo "::error title=Missing GitHub settings::These are empty:$missing . FIREBASE_API_KEY and FIREBASE_APP_ID go in the Secrets tab; FIREBASE_PROJECT_ID and FIREBASE_DATABASE_URL go in the Variables tab."
             {
               echo "### Missing settings"
               echo "These are empty:$missing"
@@ -59,12 +64,11 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up the Android SDK
+      - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
           packages: 'platforms;android-34 build-tools;34.0.0'
 
-      # Gradle itself is installed by this step, so no wrapper files are needed in the repository.
       - name: Set up Gradle 8.7
         uses: gradle/actions/setup-gradle@v4
         with:
@@ -88,18 +92,18 @@ jobs:
           set -o pipefail
           gradle --no-daemon --stacktrace :app:assembleDebug 2>&1 | tee "$GITHUB_WORKSPACE/build.log"
 
-      - name: Show the build errors in the summary
+      - name: Show build errors in summary
         if: ${{ failure() && steps.build.outcome == 'failure' }}
         run: |
           {
             echo "### The Android build failed"
-            echo "Copy the lines below and paste them to Claude, together with the file name shown after \`e:\`."
+            echo "Copy the lines below and paste them to ChatGPT or Copilot, together with the file name shown after \`e:\`."
             echo '```'
             grep -E "^e: |error:|What went wrong|Execution failed|Could not resolve|Unresolved reference" -A2 "$GITHUB_WORKSPACE/build.log" | head -80 || true
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload the full logs and reports when something failed
+      - name: Upload full logs and reports when something failed
         if: ${{ failure() }}
         uses: actions/upload-artifact@v4
         with:
@@ -119,7 +123,7 @@ jobs:
           {
             echo "### Android build finished"
             echo "Unit tests: ${{ steps.tests.outcome }} (report only)"
-            echo "Download **Dailytalk-debug-apk** from the Artifacts section at the bottom of this run's page."
+            echo "Download **Dailytalk-debug-apk** from the Artifacts section."
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload the APK
