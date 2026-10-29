@@ -1,17 +1,53 @@
-const KEY = import.meta.env.VITE_GIPHY_API_KEY as string | undefined;
-export const giphyConfigured = Boolean(KEY);
+const KEY = import.meta.env.VITE_GIF_API_KEY as string | undefined;
+export const gifApiConfigured = Boolean(KEY);
 
-export interface Gif { id: string; url: string; preview: string }
+export interface Gif {
+  id: string;
+  url: string;
+  preview: string;
+}
 
-/** Only https://media*.giphy.com URLs are accepted by database.rules.json. */
+export interface EmojiItem {
+  symbol: string;
+  name: string;
+}
+
 export async function searchGifs(q: string): Promise<Gif[]> {
   if (!KEY) return [];
-  const endpoint = q.trim() ? 'search' : 'trending';
-  const url = `https://api.giphy.com/v1/gifs/${endpoint}?api_key=${encodeURIComponent(KEY)}&limit=24&rating=g&q=${encodeURIComponent(q.trim())}`;
+  const query = encodeURIComponent(q.trim());
+  const url = `https://api.yourprovider.com/v1/search?type=gif&query=${query}&key=${encodeURIComponent(KEY)}`;
+
   const res = await fetch(url);
   if (!res.ok) throw new Error('GIF search failed.');
   const json = await res.json();
-  return (json.data as Array<{ id: string; images: { fixed_height: { url: string }; fixed_height_small: { url: string } } }>)
-    .map((g) => ({ id: g.id, url: g.images.fixed_height.url, preview: g.images.fixed_height_small.url }))
-    .filter((g) => /^https:\/\/media[0-9]*\.giphy\.com\//.test(g.url));
+
+  // Example response shape:
+  // { data: [{ id, url, preview }] }
+  const items = Array.isArray(json.data) ? json.data : [];
+  return items
+    .filter((g: any) => g?.url || g?.preview)
+    .map((g: any) => ({
+      id: String(g.id ?? Math.random().toString(36).slice(2)),
+      url: String(g.url),
+      preview: String(g.preview ?? g.url),
+    }));
+}
+
+export async function fetchEmojiSet(): Promise<EmojiItem[]> {
+  if (!KEY) return [];
+  const url = `https://api.yourprovider.com/v1/emojis?key=${encodeURIComponent(KEY)}`;
+
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('Emoji fetch failed.');
+  const json = await res.json();
+
+  // Example response:
+  // { data: [{ symbol: '😀', name: 'grinning' }, ...] }
+  const items = Array.isArray(json.data) ? json.data : [];
+  return items
+    .map((e: any) => ({
+      symbol: String(e.symbol ?? e.emoji ?? ''),
+      name: String(e.name ?? 'emoji'),
+    }))
+    .filter((e) => e.symbol);
 }
