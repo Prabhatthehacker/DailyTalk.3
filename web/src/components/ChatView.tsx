@@ -5,22 +5,19 @@ import * as api from '../lib/api';
 import { conversationTitle, formatTime, peerNumberOf } from '../lib/labels';
 import { formatNumber } from '../lib/number';
 import { MAX_UPLOAD_MB, mediaKind, uploadMedia, validateMedia } from '../lib/media';
-import { giphyConfigured, searchGifs, type Gif } from '../lib/giphy';
+import { fetchEmojiSet, gifApiConfigured, searchGifs, type Gif, type EmojiItem } from '../lib/giphy';
 import type { Conversation, Message } from '../lib/types';
 import { Avatar } from './Logo';
 import { ChatMenu, type ChatAction } from './ChatMenu';
 import { Confirm } from './Dialogs';
 
-const EMOJI_GROUPS = [
-  { name: 'Smileys', items: ['😀', '😁', '😂', '🤣', '😅', '😊', '😇', '🙂', '😎', '🤩', '😍', '😘', '😜', '🤔', '😐', '😬', '🙃', '😶', '😮', '😵', '🤯', '😴', '😷', '🤧'] },
-  { name: 'People', items: ['👍', '👎', '👏', '🙏', '💪', '🧠', '🤝', '🎉', '🔥', '❤️', '💛', '💚', '💙', '💜', '🧡', '💖', '✨', '🌟', '🎂', '🍕', '☕', '🌈', '🌞', '📚', '💻'] },
-  { name: 'Animals', items: ['🐶', '🐱', '🦊', '🐼', '🐻', '🐨', '🐯', '🦁', '🐵', '🐸', '🐧', '🦄', '🐔', '🦋', '🐝', '🐞', '🐙', '🐠', '🐬', '🦀', '🐳'] },
-  { name: 'Actions', items: ['⚽', '🏀', '🎯', '🎲', '🎸', '🎻', '🎧', '🎮', '🏆', '🚀', '💡', '📌', '✈️', '🚗', '🚲', '🏠', '🧳', '🎁', '🎊', '🎈'] },
-  { name: 'Objects', items: ['💎', '🧩', '🪄', '🧸', '📱', '⌚', '💼', '🧾', '🗂️', '🧺', '🪴', '🍀', '🌙', '⭐', '☀️', '⏰', '📷', '🎧', '🧵', '🛠️'] },
-];
 const PAGE = 40;
 
-interface Outbox { msg: Message; out: api.OutgoingMessage; file?: File }
+interface Outbox {
+  msg: Message;
+  out: api.OutgoingMessage;
+  file?: File;
+}
 
 export function ChatView({ conv, onAction }: { conv: Conversation; onAction: (a: ChatAction, c: Conversation) => void }) {
   const { user, profile, contacts, profiles, cleared, toast } = useStore();
@@ -44,7 +41,9 @@ export function ChatView({ conv, onAction }: { conv: Conversation; onAction: (a:
     return [...server, ...outbox.map((o) => o.msg).filter((m) => !ids.has(m.id))];
   }, [server, outbox]);
 
-  useEffect(() => { if (stick.current) listRef.current?.scrollTo({ top: listRef.current.scrollHeight }); }, [messages.length]);
+  useEffect(() => {
+    if (stick.current) listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
+  }, [messages.length]);
 
   useEffect(() => {
     if (document.visibilityState !== 'visible') return;
@@ -52,7 +51,9 @@ export function ChatView({ conv, onAction }: { conv: Conversation; onAction: (a:
     if ((conv.unread[me] ?? 0) > 0) void api.markConversationRead(conv.id, me).catch(() => undefined);
   }, [server, conv.id, conv.unread, me]);
 
-  const patch = useCallback((id: string, p: Partial<Message>) => setOutbox((o) => o.map((x) => (x.msg.id === id ? { ...x, msg: { ...x.msg, ...p } } : x))), []);
+  const patch = useCallback((id: string, p: Partial<Message>) => {
+    setOutbox((o) => o.map((x) => (x.msg.id === id ? { ...x, msg: { ...x.msg, ...p } } : x)));
+  }, []);
 
   const dispatch = useCallback(async (entry: Outbox) => {
     patch(entry.msg.id, { state: 'sending', progress: 0 });
@@ -178,9 +179,15 @@ function Composer({ text, setText, onSubmit, onFiles, onGif }: {
   text: string; setText: (t: string) => void; onSubmit: (e: FormEvent) => void; onFiles: (f: FileList | null) => void; onGif: (g: Gif) => void;
 }) {
   const [panel, setPanel] = useState<null | 'emoji' | 'gif'>(null);
+  const [emojiSet, setEmojiSet] = useState<EmojiItem[]>([]);
   const [emojiTab, setEmojiTab] = useState(0);
   const fileInput = useRef<HTMLInputElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (!gifApiConfigured) return;
+    void fetchEmojiSet().then(setEmojiSet).catch(() => undefined);
+  }, []);
 
   return (
     <div className="composer-wrap">
@@ -190,19 +197,27 @@ function Composer({ text, setText, onSubmit, onFiles, onGif }: {
             <strong>Emoji</strong>
             <button type="button" className="icon-btn small" aria-label="Close emoji picker" onClick={() => setPanel(null)}>✕</button>
           </div>
-          <div className="emoji-tabs" role="tablist" aria-label="Emoji categories">
-            {EMOJI_GROUPS.map((group, index) => (
-              <button key={group.name} type="button" className={index === emojiTab ? 'active' : ''} onClick={() => setEmojiTab(index)} role="tab" aria-selected={index === emojiTab} aria-label={group.name}>
-                {group.name}
-              </button>
-            ))}
-          </div>
+
           <div className="emoji-grid">
-            {EMOJI_GROUPS[emojiTab].items.map((emoji) => (
-              <button key={emoji} type="button" className="emoji-btn" onClick={() => { setText(text + emoji); taRef.current?.focus(); setPanel(null); }} aria-label={`Insert ${emoji}`}>
-                {emoji}
-              </button>
-            ))}
+            {emojiSet.length ? (
+              emojiSet.slice(0, 80).map((emoji) => (
+                <button
+                  key={emoji.name}
+                  type="button"
+                  className="emoji-btn"
+                  onClick={() => {
+                    setText(text + emoji.symbol);
+                    taRef.current?.focus();
+                    setPanel(null);
+                  }}
+                  aria-label={`Insert ${emoji.symbol}`}
+                >
+                  {emoji.symbol}
+                </button>
+              ))
+            ) : (
+              <div className="emoji-empty">Loading emojis…</div>
+            )}
           </div>
         </div>
       )}
@@ -216,12 +231,30 @@ function Composer({ text, setText, onSubmit, onFiles, onGif }: {
         <button type="button" className="icon-btn gif-btn" aria-label="GIF" aria-pressed={panel === 'gif'} onClick={() => setPanel(panel === 'gif' ? null : 'gif')}>GIF</button>
         <button type="button" className="icon-btn" aria-label="Send a photo or video" onClick={() => fileInput.current?.click()}>📎</button>
 
-        <input ref={fileInput} type="file" hidden multiple accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime"
-          onChange={(e) => { onFiles(e.target.files); e.target.value = ''; }} />
+        <input
+          ref={fileInput}
+          type="file"
+          hidden
+          multiple
+          accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime"
+          onChange={(e) => { onFiles(e.target.files); e.target.value = ''; }}
+        />
 
-        <textarea ref={taRef} rows={1} value={text} maxLength={4000} placeholder="Type a message" aria-label="Message"
+        <textarea
+          ref={taRef}
+          rows={1}
+          value={text}
+          maxLength={4000}
+          placeholder="Type a message"
+          aria-label="Message"
           onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); onSubmit(e); } }} />
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+              e.preventDefault();
+              onSubmit(e);
+            }
+          }}
+        />
 
         <button className="btn primary send" disabled={!text.trim()} aria-label="Send">Send</button>
       </form>
@@ -235,7 +268,7 @@ function GifPanel({ onPick, onClose }: { onPick: (g: Gif) => void; onClose: () =
   const [state, setState] = useState<'idle' | 'loading' | 'error'>('idle');
 
   useEffect(() => {
-    if (!giphyConfigured) return;
+    if (!gifApiConfigured) return;
     setState('loading');
     const timer = setTimeout(() => {
       searchGifs(q)
@@ -245,14 +278,14 @@ function GifPanel({ onPick, onClose }: { onPick: (g: Gif) => void; onClose: () =
     return () => clearTimeout(timer);
   }, [q]);
 
-  if (!giphyConfigured) {
+  if (!gifApiConfigured) {
     return (
       <div className="panel gif-panel">
         <div className="panel-header">
           <strong>GIFs</strong>
           <button type="button" className="icon-btn small" aria-label="Close GIF picker" onClick={onClose}>✕</button>
         </div>
-        <p className="panel-note">Add VITE_GIPHY_API_KEY in your site settings to enable GIF search with Giphy.</p>
+        <p className="panel-note">Add VITE_GIF_API_KEY in your site settings to enable GIF search and emoji support.</p>
       </div>
     );
   }
@@ -270,7 +303,7 @@ function GifPanel({ onPick, onClose }: { onPick: (g: Gif) => void; onClose: () =
 
       {state === 'error' && <p className="error">Could not load GIFs. Try again.</p>}
       {state === 'loading' && <p className="muted">Loading GIFs…</p>}
-      {!state && <p className="muted">Trending now</p>}
+      {state === 'idle' && <p className="muted">Trending now</p>}
 
       <div className="gif-grid">
         {gifs.map((g) => (
