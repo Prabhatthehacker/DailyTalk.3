@@ -11,10 +11,19 @@ export function Lockup({ width = 260 }: { width?: number }) {
   return <img src={lockupUrl} width={width} alt="Daily Talk. Small messages. Big connections." style={{ display: 'block', maxWidth: '100%', height: 'auto' }} />;
 }
 
-export function Avatar({ name, size = 44, group }: { name: string; size?: number; group?: boolean }) {
+export function Avatar({ name, size = 44, group, photoUrl }: { name: string; size?: number; group?: boolean; photoUrl?: string | null }) {
   const parts = name.replace(/[^\p{L}\p{N} ]/gu, '').trim().split(/\s+/).filter(Boolean);
   const text = group ? '👥' : parts.length ? (parts[0][0] + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase() : '?';
   let h = 0; for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) % 360;
-  const hue = 20 + (h % 40); // stays inside the warm range
+  const hue = 20 + (h % 40);
+
+  if (photoUrl) {
+    return (
+      <span className="avatar" style={{ width: size, height: size, overflow: 'hidden', background: `hsl(${hue} 55% 82%)` }} aria-hidden>
+        <img src={photoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+      </span>
+    );
+  }
+
   return <span className="avatar" style={{ width: size, height: size, fontSize: size * 0.38, background: `hsl(${hue} 55% 82%)`, color: `hsl(${hue} 45% 28%)` }} aria-hidden>{text}</span>;
 }

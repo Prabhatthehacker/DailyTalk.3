@@ -17,7 +17,7 @@ import type { Contact, Conversation, Message, MessageKind, Profile, Status } fro
  *  conversations/{cid}/{meta,members,admins,messages}
  *  statuses/{sid}, statusFeed/{uid}/{sid}, statusViews/{sid}/{uid}
  *  calls/{id}, callInbox/{uid}/{id}
- */
+ *  */
 export const R = (path = '') => (path ? ref(db, path) : ref(db));
 const keysOf = (o: unknown): string[] => Object.keys((o as Record<string, unknown> | null) ?? {});
 const denied = (e: unknown) => String((e as { code?: string; message?: string })?.code ?? '') === 'PERMISSION_DENIED' || String((e as Error)?.message ?? e).includes('PERMISSION_DENIED');
@@ -28,18 +28,18 @@ export function authMessage(err: unknown): string {
   const map: Record<string, string> = {
     'auth/invalid-email': 'That email address is not valid.',
     'auth/missing-password': 'Enter your password.',
-    'auth/weak-password': 'Choose a password with at least 6 characters.',
+    'auth/weak-password': 'Choose a password at least 6 characters long.',
     'auth/email-already-in-use': 'An account with this email already exists. Sign in instead.',
     'auth/invalid-credential': 'Email or password is incorrect.',
     'auth/user-not-found': 'Email or password is incorrect.',
     'auth/wrong-password': 'Email or password is incorrect.',
-    'auth/too-many-requests': 'Too many attempts. Wait a few minutes and try again.',
+    'auth/too-many-requests': 'Too many attempts. Try again later.',
     'auth/network-request-failed': 'Cannot reach the server. Check your connection.',
     'auth/requires-recent-login': 'For safety, sign out, sign in again, then retry.',
     'auth/operation-not-allowed': 'This sign-in method is not enabled in the Firebase Console.',
     'auth/popup-closed-by-user': 'The Google sign-in window was closed before finishing.',
     'auth/cancelled-popup-request': 'The Google sign-in window was closed before finishing.',
-    'auth/popup-blocked': 'Your browser blocked the Google sign-in window. Allow pop-ups for this site and try again.',
+    'auth/popup-blocked': 'Your browser blocked the sign-in popup. Allow pop-ups and try again.',
     'auth/unauthorized-domain': 'This website address is not allowed to sign in yet. Add it under Authentication, Settings, Authorized domains in Firebase.',
     'auth/account-exists-with-different-credential': 'An account with this email already exists. Sign in with your email and password instead.',
   };
@@ -52,9 +52,7 @@ export async function register(name: string, email: string, password: string): P
   await ensureAccount(cred.user.uid, name.trim());
 }
 export const login = (email: string, password: string) => signInWithEmailAndPassword(auth, email.trim(), password);
-/** Opens Google's sign-in window (website only). New accounts get their Daily Talk number automatically afterwards. */
 export const signInWithGoogle = () => signInWithPopup(auth, new GoogleAuthProvider());
-/** Signs out and forgets everything cached for the previous user. */
 export async function logout(): Promise<void> {
   profileCache.clear();
   await signOut(auth);
@@ -63,7 +61,12 @@ export const resetPassword = (email: string) => sendPasswordResetEmail(auth, ema
 
 // ---------------------------------------------------------------- profile & assigned number
 export function watchProfile(uid: string, cb: (p: Profile | null) => void): Unsubscribe {
-  return onValue(R(`users/${uid}`), (s) => cb(s.exists() ? { uid, displayName: s.val().displayName, phone: s.val().phone ?? null } : null), () => cb(null));
+  return onValue(R(`users/${uid}`), (s) => cb(s.exists() ? {
+    uid,
+    displayName: s.val().displayName ?? 'Unknown',
+    phone: s.val().phone ?? null,
+    photoURL: s.val().photoURL ?? null,
+  } : null), () => cb(null));
 }
 const profileCache = new Map<string, Profile>();
 export async function fetchProfiles(uids: string[]): Promise<Profile[]> {
@@ -71,37 +74,38 @@ export async function fetchProfiles(uids: string[]): Promise<Profile[]> {
     const hit = profileCache.get(uid);
     if (hit) return hit;
     const s = await get(R(`users/${uid}`));
-    const p: Profile = { uid, displayName: s.exists() ? s.val().displayName : 'Unknown', phone: s.exists() ? s.val().phone ?? null : null };
+    const p: Profile = {
+      uid,
+      displayName: s.exists() ? s.val().displayName ?? 'Unknown' : 'Unknown',
+      phone: s.exists() ? s.val().phone ?? null : null,
+      photoURL: s.exists() ? s.val().photoURL ?? null : null,
+    };
     profileCache.set(uid, p);
     return p;
   }));
 }
 export const dropProfileCache = (uid: string) => profileCache.delete(uid);
 
-/**
- * Gives the account its permanent Daily Talk number (only if it has none yet).
- * phoneIndex is create-only: if a random number is taken the write is refused and we try another.
- */
 export async function ensureAccount(uid: string, name: string): Promise<string> {
   let lastError: unknown;
   for (let attempt = 0; attempt < 12; attempt++) {
-    const existing = await get(R(`users/${uid}`)); // re-read: another tab/request may have assigned it meanwhile
+    const existing = await get(R(`users/${uid}`));
     if (existing.exists() && existing.val().phone) return existing.val().phone as string;
     const number = generateNumber();
     try {
-      await set(R(`phoneIndex/${number}`), uid); // claim (fails if taken)
+      await set(R(`phoneIndex/${number}`), uid);
     } catch (e) {
       lastError = e;
       if (!denied(e)) throw e;
       continue;
     }
     try {
-      await update(R(`users/${uid}`), existing.exists() ? { phone: number } : { displayName: name, phone: number, createdAt: serverTimestamp() });
+      await update(R(`users/${uid}`), existing.exists() ? { phone: number } : { displayName: name, phone: number, photoURL: auth.currentUser?.photoURL ?? null, createdAt: serverTimestamp() });
       dropProfileCache(uid);
       return number;
     } catch (e) {
       lastError = e;
-      await remove(R(`phoneIndex/${number}`)).catch(() => undefined); // give the unused claim back
+      await remove(R(`phoneIndex/${number}`)).catch(() => undefined);
       if (!denied(e)) throw e;
     }
   }
@@ -110,8 +114,9 @@ export async function ensureAccount(uid: string, name: string): Promise<string> 
 
 export async function updateDisplayName(uid: string, name: string) {
   if (!name.trim()) throw new Error('Enter your name.');
-  await update(R(`users/${uid}`), { displayName: name.trim() });
-  if (auth.currentUser) await updateProfile(auth.currentUser, { displayName: name.trim() });
+  const clean = name.trim();
+  await update(R(`users/${uid}`), { displayName: clean, photoURL: auth.currentUser?.photoURL ?? null });
+  if (auth.currentUser) await updateProfile(auth.currentUser, { displayName: clean, photoURL: auth.currentUser.photoURL ?? null });
   dropProfileCache(uid);
 }
 
@@ -150,7 +155,6 @@ const entryFor = (type: 'direct' | 'group', members: string[], admins: string[],
   ...(admins.length ? { admins: Object.fromEntries(admins.map((m) => [m, true])) } : {}), updatedAt: serverTimestamp(), unread: 0,
 });
 
-/** Creates a conversation (in steps, because each step is checked by the security rules) unless you are already in it. */
 async function ensureConversation(cid: string, type: 'direct' | 'group', members: string[], me: string, name?: string) {
   const mine = await get(R(`conversations/${cid}/members/${me}`)).then((s) => s.val() === true).catch(() => false);
   if (!mine) {
@@ -166,7 +170,6 @@ async function ensureConversation(cid: string, type: 'direct' | 'group', members
   await remove(R(`cleared/${me}/${cid}`)).catch(() => undefined);
 }
 
-/** Start (or reopen) a direct chat using someone's Daily Talk number. Returns the conversation id. */
 export async function startChatWithNumber(me: Profile, raw: string): Promise<string> {
   const number = normalizeNumber(raw);
   if (!number) throw new Error('Enter a 10-digit Daily Talk number.');
@@ -205,12 +208,12 @@ export async function addMembers(conv: Conversation, numbers: string[], self: st
   if (add.length) {
     const grant: Record<string, unknown> = {};
     add.forEach((m) => { grant[`conversations/${conv.id}/members/${m}`] = true; });
-    await update(R(), grant);                                   // step 1: admin adds them
+    await update(R(), grant);
     const all = [...conv.members, ...add];
     const entries: Record<string, unknown> = {};
     add.forEach((m) => { entries[`userChats/${m}/${conv.id}`] = entryFor('group', all, conv.admins ?? [], conv.name); });
     conv.members.forEach((m) => add.forEach((n) => { entries[`userChats/${m}/${conv.id}/members/${n}`] = true; }));
-    await update(R(), entries);                                  // step 2: everyone's chat list
+    await update(R(), entries);
   }
   return { added: add.length, missing };
 }
@@ -232,7 +235,6 @@ export async function leaveGroup(c: Conversation, uid: string) {
   });
   await update(R(), u);
 }
-/** Per-user: hides history for you only. Saved contacts and other members are untouched. */
 export const clearConversation = (uid: string, cid: string) => set(R(`cleared/${uid}/${cid}`), serverTimestamp());
 export const markConversationRead = (cid: string, uid: string) => set(R(`userChats/${uid}/${cid}/unread`), 0);
 
@@ -259,7 +261,6 @@ export const newMessageId = (cid: string) => push(R(`conversations/${cid}/messag
 const previewOf = (m: OutgoingMessage, text?: string) =>
   m.kind === 'gif' ? 'GIF' : m.kind === 'image' ? 'Photo' : m.kind === 'video' ? 'Video' : (text ?? '').slice(0, 120);
 
-/** Resolves only after the server accepted the write; throws otherwise so the UI can show "failed". */
 export async function sendMessage(conv: Conversation, me: Profile, m: OutgoingMessage) {
   const body: Record<string, unknown> = {
     senderId: me.uid, senderName: me.displayName, kind: m.kind, createdAt: serverTimestamp(), readBy: { [me.uid]: true },
@@ -296,10 +297,6 @@ const toStatus = (id: string, d: Record<string, unknown>): Status => ({
   createdAt: (d.createdAt as number) ?? 0, expiresAt: (d.expiresAt as number) ?? 0, viewers: keysOf(d.viewers),
 });
 
-/**
- * Listens to your status feed (ids only), loads each status (the rules refuse expired ones) and tidies up:
- * expired feed entries are removed from your own feed, and authors delete their own expired statuses.
- */
 export function watchStatuses(uid: string, cb: (s: Status[]) => void): Unsubscribe {
   const cache = new Map<string, Status | null>();
   let live = true;
@@ -350,8 +347,6 @@ export function watchStatusViews(sid: string, cb: (n: number) => void): Unsubscr
   return onValue(R(`statusViews/${sid}`), (s) => cb(s.size), () => cb(0));
 }
 
-// ---------------------------------------------------------------- account deletion
-/** Removes the profile, number, contacts, chat list and sign-in. Messages you sent remain in conversations (see README). */
 export async function deleteAccount(user: User, profile: Profile) {
   const uid = user.uid;
   await update(R(), { [`contacts/${uid}`]: null, [`cleared/${uid}`]: null, [`userChats/${uid}`]: null, [`callInbox/${uid}`]: null });

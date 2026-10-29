@@ -1,4 +1,4 @@
-export interface Profile { uid: string; displayName: string; phone?: string | null }
+export interface Profile { uid: string; displayName: string; phone?: string | null; photoURL?: string | null }
 
 export interface Conversation {
   id: string;
@@ -50,4 +50,3 @@ export interface CallDoc {
   answer?: { type: string; sdp: string };
   createdAt: number;
 }
-

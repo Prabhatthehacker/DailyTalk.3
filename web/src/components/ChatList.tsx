@@ -13,19 +13,33 @@ export function Sidebar({ tab, onAction, onAddChat, onAddGroup, onSettings, onLo
   const { user, profile, conversations, contacts, profiles } = useStore();
   const [q, setQ] = useState(''); const nav = useNavigate(); const add = usePopover();
   const me = user!.uid;
+  const avatarUrl = profile?.photoURL ?? user?.photoURL ?? undefined;
   const rows = useMemo(() => conversations
     .map((c) => ({ c, title: conversationTitle(c, me, contacts, profiles) }))
     .filter((r) => r.title.toLowerCase().includes(q.trim().toLowerCase())), [conversations, contacts, profiles, q, me]);
 
   return (
-    <aside className="sidebar">
-      <header className="side-head">
-        <div className="brand"><Logo size={32} /><strong>Daily Talk</strong></div>
-        <button className="me-chip" onClick={onSettings} aria-label="Settings"><Avatar name={profile?.displayName ?? '?'} size={30} /><span>{profile?.displayName}</span></button>
-        <button className="btn outline small logout-btn" onClick={onLogout}>Log out</button>
+    <aside className="sidebar" style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+      <header className="side-head" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+        <div className="brand" style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Logo size={32} /><strong>Daily Talk</strong></div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto', flexWrap: 'wrap' }}>
+          <button
+            className="me-chip"
+            onClick={onSettings}
+            aria-label="Account settings"
+            style={{
+              display: 'flex', alignItems: 'center', gap: 8, background: 'var(--sand)', border: '1px solid var(--line)', borderRadius: 999,
+              padding: '5px 10px 5px 6px', maxWidth: 180, minHeight: 42, width: 'fit-content', flex: '1 1 180px', justifyContent: 'flex-start'
+            }}
+          >
+            <Avatar name={profile?.displayName ?? '?'} size={30} photoUrl={avatarUrl} />
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.9rem' }}>{profile?.displayName}</span>
+          </button>
+          <button className="btn outline small logout-btn" onClick={onLogout} style={{ whiteSpace: 'nowrap' }}>Log out</button>
+        </div>
       </header>
-      <div className="tabs-row">
-        <nav className="tabs" aria-label="Sections">
+      <div className="tabs-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '6px 16px 10px' }}>
+        <nav className="tabs" aria-label="Sections" style={{ display: 'flex', gap: 4, background: 'var(--sand)', padding: 4, borderRadius: 999, flex: 1 }}>
           <NavLink to="/chats" className={tab === 'chats' ? 'tab on' : 'tab'}>Chats</NavLink>
           <NavLink to="/status" className={tab === 'status' ? 'tab on' : 'tab'}>Status</NavLink>
         </nav>
@@ -41,19 +55,19 @@ export function Sidebar({ tab, onAction, onAddChat, onAddGroup, onSettings, onLo
       </div>
       {tab === 'chats' && (
         <>
-          <input className="search" type="search" placeholder="Search chats" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search chats" />
-          <ul className="chat-list">
+          <input className="search" type="search" placeholder="Search chats" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search chats" style={{ margin: '0 16px 8px', width: 'auto', borderRadius: 999, background: 'var(--cream)' }} />
+          <ul className="chat-list" style={{ listStyle: 'none', margin: 0, padding: '4px 8px 12px', overflowY: 'auto', flex: 1 }}>
             {rows.map(({ c, title }) => {
               const unread = c.unread[me] ?? 0;
               return (
-                <li key={c.id}>
-                  <button className="chat-row" onClick={() => nav(`/chats/${c.id}`)}>
-                    <Avatar name={title} group={c.type === 'group'} />
-                    <span className="chat-main">
-                      <span className="chat-top"><strong>{title}</strong><time>{formatTime(c.updatedAt)}</time></span>
-                      <span className="chat-bottom">
-                        <span className="preview">{c.lastMessage ? `${c.lastMessage.senderId === me ? 'You: ' : ''}${c.lastMessage.text}` : 'No messages yet'}</span>
-                        {unread > 0 && <span className="badge" aria-label={`${unread} unread`}>{unread > 99 ? '99+' : unread}</span>}
+                <li key={c.id} style={{ display: 'flex', alignItems: 'center', borderRadius: 14, position: 'relative' }}>
+                  <button className="chat-row" onClick={() => nav(`/chats/${c.id}`)} style={{ flex: 1, minWidth: 0, display: 'flex', gap: 12, alignItems: 'center', background: 'none', border: 0, padding: '10px 6px 10px 8px', textAlign: 'left' }}>
+                    <Avatar name={title} group={c.type === 'group'} size={42} photoUrl={undefined} />
+                    <span className="chat-main" style={{ flex: 1, minWidth: 0, display: 'grid', gap: 2 }}>
+                      <span className="chat-top" style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}><strong>{title}</strong><time>{formatTime(c.updatedAt)}</time></span>
+                      <span className="chat-bottom" style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
+                        <span className="preview" style={{ color: 'var(--muted)', fontSize: '0.88rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.lastMessage ? `${c.lastMessage.senderId === me ? 'You: ' : ''}${c.lastMessage.text}` : 'No messages yet'}</span>
+                        {unread > 0 && <span className="badge" aria-label={`${unread} unread`} style={{ background: 'var(--brown)', color: '#fff', borderRadius: 999, minWidth: 22, height: 22, padding: '0 6px', fontSize: '0.75rem', fontWeight: 700, display: 'grid', placeItems: 'center' }}>{unread > 99 ? '99+' : unread}</span>}
                       </span>
                     </span>
                   </button>
@@ -62,7 +76,7 @@ export function Sidebar({ tab, onAction, onAddChat, onAddGroup, onSettings, onLo
               );
             })}
             {!rows.length && (
-              <li className="empty-list">{q ? 'No chats match your search.' : 'No chats yet. Use Add to start one with a phone number.'}</li>
+              <li className="empty-list" style={{ padding: '24px 16px', color: 'var(--muted)', textAlign: 'center' }}>{q ? 'No chats match your search.' : 'No chats yet. Use Add to start one with a phone number.'}</li>
             )}
           </ul>
         </>

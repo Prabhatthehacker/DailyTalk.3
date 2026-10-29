@@ -17,8 +17,8 @@ export function Modal({ title, onClose, children }: { title: string; onClose: ()
   }, [onClose]);
   return (
     <div className="scrim" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal" role="dialog" aria-modal="true" aria-label={title} ref={ref}>
-        <header><h2>{title}</h2><button className="icon-btn" onClick={onClose} aria-label="Close">✕</button></header>
+      <div className="modal" role="dialog" aria-modal="true" aria-label={title} ref={ref} style={{ maxWidth: 560, width: 'min(92vw, 560px)' }}>
+        <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}><h2>{title}</h2><button className="icon-btn" onClick={onClose} aria-label="Close">✕</button></header>
         {children}
       </div>
     </div>
@@ -86,7 +86,6 @@ export function NewGroupDialog({ onClose, onOpen }: { onClose: () => void; onOpe
   );
 }
 
-/** Rename a saved contact, or save the number under a name ("Manage saved number"). */
 export function ContactDialog({ conv, onClose }: { conv: Conversation; onClose: () => void }) {
   const { user, profiles, contacts, toast } = useStore();
   const number = peerNumberOf(conv, user!.uid, profiles);
@@ -127,7 +126,7 @@ export function GroupInfoDialog({ conv, onClose }: { conv: Conversation; onClose
         <ul className="members">
           {conv.members.map((m) => {
             const p = profiles.get(m); const label = m === me ? 'You' : p?.displayName ?? 'Member';
-            return <li key={m}><Avatar name={label} size={36} /><span>{label}{p?.phone && m !== me ? <small> {formatNumber(p.phone)}</small> : null}</span>{conv.admins?.includes(m) && <em>Admin</em>}</li>;
+            return <li key={m}><Avatar name={label} size={36} photoUrl={p?.photoURL ?? undefined} /><span>{label}{p?.phone && m !== me ? <small> {formatNumber(p.phone)}</small> : null}</span>{conv.admins?.includes(m) && <em>Admin</em>}</li>;
           })}
         </ul>
         {admin && (
@@ -153,12 +152,19 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const [busy, setBusy] = useState(false); const [del, setDel] = useState(false);
   if (!user || !profile) return null;
   const copy = () => { void navigator.clipboard?.writeText(profile.phone ?? '').then(() => toast('Number copied'), () => toast('Could not copy. Select the number and copy it by hand.')); };
+  const avatarUrl = profile.photoURL ?? user.photoURL ?? undefined;
   return (
     <Modal title="Settings" onClose={onClose}>
       <div className="stack">
-        <div className="number-card">
-          <small>Your Daily Talk number</small>
-          <strong className="big-number" aria-label={profile.phone ?? ''}>{profile.phone ? formatNumber(profile.phone) : 'Creating…'}</strong>
+        <div className="number-card" style={{ display: 'grid', gap: 12, border: '1px solid var(--line)', borderRadius: 20, background: 'var(--ivory)', padding: 18 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <Avatar name={profile.displayName} size={56} photoUrl={avatarUrl} />
+            <div style={{ display: 'grid', gap: 2 }}>
+              <small style={{ color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Account</small>
+              <strong>{profile.displayName}</strong>
+            </div>
+          </div>
+          <strong className="big-number" aria-label={profile.phone ?? ''} style={{ fontSize: '1.8rem', letterSpacing: '-0.04em' }}>{profile.phone ? formatNumber(profile.phone) : 'Creating…'}</strong>
           <p className="hint">This is your number from now on. It was given to you when you signed up and cannot be changed. Write it down, and share it so people can chat with you.</p>
           <button type="button" className="btn outline small" onClick={copy} disabled={!profile.phone}>Copy number</button>
         </div>
@@ -178,7 +184,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
           <button type="button" className="btn danger-outline" onClick={() => setDel(true)}>Delete account</button>
         </div>
       </div>
-      {del && <Confirm title="Delete your account?" body="This removes your profile, your number, saved contacts and sign-in. Messages you already sent stay in other people's chats. Your number stops working and cannot be recovered. This cannot be undone." action="Delete account" danger
+      {del && <Confirm title="Delete your account?" body="This removes your profile, your number, saved contacts and sign-in. Messages you already sent stay in other people's chats. Your number stays assigned to you until you delete the account." action="Delete account" danger
         onConfirm={() => api.deleteAccount(user, profile)} onClose={() => setDel(false)} />}
     </Modal>
   );
