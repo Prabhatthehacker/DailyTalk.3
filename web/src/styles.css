@@ -60,28 +60,6 @@
   color: var(--cocoa);
 }
 
-.emoji-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.emoji-tabs button {
-  background: var(--sand);
-  border: 1px solid transparent;
-  border-radius: 999px;
-  padding: 6px 10px;
-  font-size: 0.78rem;
-  font-weight: 700;
-  color: var(--brown-deep);
-}
-
-.emoji-tabs button.active {
-  background: var(--brown);
-  color: white;
-  border-color: var(--brown);
-}
-
 .emoji-grid {
   display: grid;
   grid-template-columns: repeat(8, minmax(0, 1fr));
@@ -141,12 +119,6 @@
   padding: 0 6px 4px;
   color: var(--muted);
   line-height: 1.5;
-}
-
-.icon-btn.small {
-  width: 28px;
-  height: 28px;
-  font-size: 0.95rem;
 }
 
 @media (max-width: 768px) {
