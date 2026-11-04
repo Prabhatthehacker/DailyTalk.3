@@ -1,7 +1,11 @@
 package com.dailytalk.app
 
 import android.content.Context
+import android.media.AudioAttributes
 import android.media.AudioManager
+import android.media.Ringtone
+import android.media.RingtoneManager
+import android.os.Build
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -21,7 +25,7 @@ data class CallUi(
     val doc: CallDoc? = null,
 )
 
-/** Owns the single active call and its UI state. Survives configuration changes. */
+/** Owns the single active call, its ringtone, and UI state. Survives configuration changes. */
 object CallManager {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val _ui = MutableStateFlow<CallUi?>(null)
@@ -29,12 +33,34 @@ object CallManager {
     var session: RtcSession? = null
         private set
     private var timeout: Job? = null
+    private var ringtone: Ringtone? = null
 
     fun showIncoming(ctx: Context, call: CallDoc, name: String) {
         if (_ui.value != null) return
         _ui.value = CallUi(name, call.type == "video", true, "ringing", doc = call)
+        startRingtone(ctx)
         Notifier.incomingCall(ctx, name, call.type == "video")
         timeout = scope.launch { delay(45_000); if (_ui.value?.status == "ringing") dismiss(ctx) }
+    }
+
+    private fun startRingtone(ctx: Context) {
+        stopRingtone()
+        val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE) ?: return
+        ringtone = runCatching {
+            RingtoneManager.getRingtone(ctx.applicationContext, uri)?.apply {
+                audioAttributes = AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build()
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) isLooping = true
+                play()
+            }
+        }.getOrNull()
+    }
+
+    private fun stopRingtone() {
+        runCatching { ringtone?.stop() }
+        ringtone = null
     }
 
     fun start(ctx: Context, me: String, peer: String, cid: String, name: String, video: Boolean) {
@@ -59,6 +85,7 @@ object CallManager {
         val cur = _ui.value ?: return
         val call = cur.doc ?: return
         timeout?.cancel()
+        stopRingtone()
         Notifier.cancelCall(ctx)
         _ui.value = cur.copy(status = "connecting")
         scope.launch {
@@ -77,12 +104,13 @@ object CallManager {
 
     fun hangup(ctx: Context) {
         val s = session
+        stopRingtone()
         _ui.value = _ui.value?.copy(status = "ended")
         scope.launch { s?.end(); finish(ctx, "ended") }
     }
 
     fun dismiss(ctx: Context) {
-        timeout?.cancel(); Notifier.cancelCall(ctx)
+        timeout?.cancel(); stopRingtone(); Notifier.cancelCall(ctx)
         session?.close(); session = null
         audioMode(ctx, false, false)
         _ui.value = null
@@ -90,20 +118,20 @@ object CallManager {
 
     private fun onStatus(s: String) {
         val cur = _ui.value ?: return
-        if (s == "failed") { scope.launch { session?.end() }; _ui.value = cur.copy(status = "failed"); return }
+        if (s == "failed") { stopRingtone(); scope.launch { session?.end() }; _ui.value = cur.copy(status = "failed"); return }
         if (cur.status !in setOf("ended", "rejected", "missed", "failed")) _ui.value = cur.copy(status = s)
-        if (s == "connected") timeout?.cancel()
+        if (s == "connected") { timeout?.cancel(); stopRingtone() }
     }
 
     private fun finish(ctx: Context, state: String) {
-        timeout?.cancel(); session?.close(); session = null
+        timeout?.cancel(); stopRingtone(); Notifier.cancelCall(ctx); session?.close(); session = null
         audioMode(ctx, false, false)
         _ui.value = _ui.value?.copy(status = state)
         scope.launch { delay(2500); if (_ui.value?.status == state) _ui.value = null }
     }
 
     private fun fail(ctx: Context, e: Exception) {
-        session?.close(); session = null
+        stopRingtone(); Notifier.cancelCall(ctx); session?.close(); session = null
         audioMode(ctx, false, false)
         _ui.value = _ui.value?.copy(status = "failed", error = "The call could not be started. Check permissions and your connection.")
         scope.launch { delay(3500); _ui.value = null }
